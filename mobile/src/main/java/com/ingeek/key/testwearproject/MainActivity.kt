@@ -8,14 +8,11 @@ import android.text.TextUtils
 import android.util.Log
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.api.GoogleApiClient
-import com.google.android.gms.wearable.DataApi
-import com.google.android.gms.wearable.DataEventBuffer
-import com.google.android.gms.wearable.DataMapItem
-import com.google.android.gms.wearable.Wearable
+import com.google.android.gms.wearable.*
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlin.contracts.contract
 
-class MainActivity : AppCompatActivity(), DataApi.DataListener, GoogleApiClient.ConnectionCallbacks,
+class MainActivity : AppCompatActivity(), DataClient.OnDataChangedListener, GoogleApiClient.ConnectionCallbacks,
     GoogleApiClient.OnConnectionFailedListener {
     var googleApiClient: GoogleApiClient? = null
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,27 +28,10 @@ class MainActivity : AppCompatActivity(), DataApi.DataListener, GoogleApiClient.
             .addConnectionCallbacks(this)
             .addApi(Wearable.API).build()
         googleApiClient!!.connect()
+
+        Wearable.getDataClient(this).addListener(this)
     }
 
-    override fun onDataChanged(p0: DataEventBuffer?) {
-        Log.d("AppLog", "收到手表发过来的数据")
-        for (data in p0!!) {
-            val uri = data.dataItem.uri
-            val path = uri.path
-            if (!TextUtils.isEmpty(path) && "/cmdData" == path) {
-                val dataMap = DataMapItem.fromDataItem(data.dataItem).dataMap
-                val cmdValue = dataMap.getString("cmdValue")
-                Log.e("AppLog", "收到数据的时间是：" + dataMap.getString("dataTime"))
-                if (!TextUtils.isEmpty(cmdValue)) {
-                    Log.e("AppLog", "收到数据是：$cmdValue")
-                    val message = Message()
-                    message.obj = cmdValue
-                    handler.sendMessage(message)
-                }
-                break
-            }
-        }
-    }
 
     var handler = Handler{
         recvText.text = it.obj.toString()
@@ -105,7 +85,26 @@ class MainActivity : AppCompatActivity(), DataApi.DataListener, GoogleApiClient.
         Log.e("AppLog", "连接手表中断")
     }
 
-    override fun onConnectionFailed(p0: ConnectionResult?) {
-        Log.e("AppLog", "连接手表失败")
+    override fun onDataChanged(p0: DataEventBuffer) {
+        Log.d("AppLog", "收到手表发过来的数据")
+        for (data in p0!!) {
+            val uri = data.dataItem.uri
+            val path = uri.path
+            if (!TextUtils.isEmpty(path) && "/cmdData" == path) {
+                val dataMap = DataMapItem.fromDataItem(data.dataItem).dataMap
+                val cmdValue = dataMap.getString("cmdValue")
+                Log.e("AppLog", "收到数据的时间是：" + dataMap.getString("dataTime"))
+                if (!TextUtils.isEmpty(cmdValue)) {
+                    Log.e("AppLog", "收到数据是：$cmdValue")
+                    val message = Message()
+                    message.obj = cmdValue
+                    handler.sendMessage(message)
+                }
+                break
+            }
+        }
     }
+
+    override fun onConnectionFailed(p0: ConnectionResult) {
+        Log.e("AppLog", "连接手表失败")    }
 }

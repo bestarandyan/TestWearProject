@@ -11,16 +11,17 @@ import android.util.Log
 import android.view.View
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.api.GoogleApiClient
-import com.google.android.gms.wearable.CapabilityApi
+import com.google.android.gms.wearable.CapabilityClient.OnCapabilityChangedListener
 import com.google.android.gms.wearable.CapabilityInfo
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.google.android.wearable.intent.RemoteIntent
 import kotlinx.android.synthetic.main.activity_main.*
+import java.util.*
 
 
 class MainActivity : WearableActivity(), GoogleApiClient.ConnectionCallbacks,
-    GoogleApiClient.OnConnectionFailedListener, CapabilityApi.CapabilityListener {
+    GoogleApiClient.OnConnectionFailedListener, OnCapabilityChangedListener {
     var googleApiClient: GoogleApiClient? = null
     private val CAPABILITY_PHONE_APP = "verify_remote_example_phone_app"
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,28 +37,26 @@ class MainActivity : WearableActivity(), GoogleApiClient.ConnectionCallbacks,
         reconnectBtn.setOnClickListener { connectServer() }
         sendDataToAppBtn.setOnClickListener { sendData("这是从手表发送过来的数据") }
         startAppBtn.setOnClickListener { startRemoteIntent() }
-        Wearable.CapabilityApi.addCapabilityListener(googleApiClient, this, CAPABILITY_PHONE_APP)
+        Wearable.getCapabilityClient(this).addListener(this, CAPABILITY_PHONE_APP)
 
     }
 
     private fun sendData(cmd: String) {
-        val request = PutDataMapRequest.create("/cmdData")
-        val dataMap = request.dataMap
-        dataMap.putString("cmdValue", cmd)
+        val dataMapRequest = PutDataMapRequest.create("/cmdData")
+        val dataMap = dataMapRequest.dataMap
+        dataMap.putString("cmdValue", cmd+System.currentTimeMillis().toString())
         dataMap.putString("dataTime", System.currentTimeMillis().toString())
-        Wearable.DataApi.putDataItem(googleApiClient, request.asPutDataRequest())
-            .setResultCallback { result ->
-                if (result.status.isSuccess) {
-                    Log.e("WearApp", "数据发送成功")
-                } else {
-                    Log.e("WearApp", "数据发送失败")
-                }
-            }
+        val request = dataMapRequest.asPutDataRequest()
+        request.setUrgent()
+        val task = Wearable.getDataClient(this).putDataItem(request)
+        task.addOnSuccessListener { result ->
+            Log.e("WearApp", "数据发送成功:$result")
+        }
     }
 
     override fun onPause() {
         super.onPause()
-        Wearable.CapabilityApi.removeCapabilityListener(googleApiClient, this, CAPABILITY_PHONE_APP)
+        Wearable.getCapabilityClient(this).removeListener(this, CAPABILITY_PHONE_APP)
     }
 
     private fun connectServer() {
@@ -68,20 +67,6 @@ class MainActivity : WearableActivity(), GoogleApiClient.ConnectionCallbacks,
         googleApiClient!!.registerConnectionCallbacks(this)
         googleApiClient!!.registerConnectionFailedListener(this)
         googleApiClient!!.connect()
-    }
-
-    private fun checkIfPhoneHasApp() {
-        Log.d("WearApp", "checkIfPhoneHasApp()")
-        val capabilityInfoTask = Wearable.CapabilityApi.getCapability(
-            googleApiClient,
-            CAPABILITY_PHONE_APP,
-            CapabilityApi.FILTER_ALL
-        )
-        capabilityInfoTask.addBatchCallback { status ->
-            if (status!!.isSuccess) {
-                Log.e("WearApp", "手机上已安装该应用")
-            }
-        }
     }
 
     private val ANDROID_MARKET_APP_URI = "ingeek://ingeek:8080/homeActivity?tool_id=100"
@@ -97,7 +82,6 @@ class MainActivity : WearableActivity(), GoogleApiClient.ConnectionCallbacks,
             mResultReceiver
         )
 
-        checkIfPhoneHasApp()
     }
 
     // Result from sending RemoteIntent to phone to open app in play/app store.
@@ -170,7 +154,7 @@ class MainActivity : WearableActivity(), GoogleApiClient.ConnectionCallbacks,
     }
 
 
-    override fun onCapabilityChanged(p0: CapabilityInfo?) {
+    override fun onCapabilityChanged(p0: CapabilityInfo) {
 
     }
 }
